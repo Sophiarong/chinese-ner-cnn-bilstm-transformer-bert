@@ -1,8 +1,7 @@
-import os.path
-from sklearn.metrics import f1_score
+from model.CnnModel import CnnModel
 from torch.utils.data import DataLoader
 from torchinfo import summary
-
+import os
 from model.LstmModel import LstmModel
 from processors.lstm_output import write_output
 from utils.argparse import get_argparse
@@ -13,12 +12,10 @@ from utils.common import seed_everything
 import prettytable as pt
 import time
 from loss.calculate_loss import pre2region, ans2region, calculate
-
-
 def main():
     #config参数读取
     args = get_argparse().parse_args()
-    init_logger(log_file="./log/lstm_{}.txt".format(time.strftime("%m-%d_%H-%M-%S")))
+    init_logger(log_file="./log/cnn_{}.txt".format(time.strftime("%m-%d_%H-%M-%S")))
     logger.info(args)
 
     #设置随机数
@@ -51,15 +48,12 @@ def main():
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=test_dataset.batch_data_pro)
 
     #初始化model
-    embedding_num = 128
-    hidden_num = 129
-    bi = True
+    embed_size = 128
 
-    model = LstmModel(embedding_num, hidden_num, corpus_num, bi, class_num, word2id['<PAD>'])
+    model = CnnModel(corpus_num, embed_size, class_num, word2id['<PAD>'])
     model = model.to(args.device)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     logger.info("\n{}".format(model))
-    summary(model, first_input=(64*12), second_input=(64), third_input=(64*12))
 
     best_dev = -1
     #训练
@@ -69,7 +63,7 @@ def main():
 
         model.train()
         for data, tag, da_len in train_dataloader:
-            loss = model.forward(data, da_len, tag)
+            loss = model.forward(data, tag)
             epoch_loss = epoch_loss + loss
             epoch_step = epoch_step + 1
             loss.backward()
@@ -80,7 +74,7 @@ def main():
         dev_res = []
 
         for dev_data, dev_tag, dev_da_len in dev_dataloader:
-            model.forward(dev_data, dev_da_len, dev_tag)
+            model.forward(dev_data, dev_tag)
 
             r = model.result.cpu().numpy()
             for i in range(len(r)):
@@ -94,22 +88,23 @@ def main():
 
         if f1 > best_dev:
             best_dev = f1
-            torch.save(model.state_dict(), 'lstm.params')
+            torch.save(model.state_dict(), 'cnn.params')
 
 
-    clone = LstmModel(embedding_num, hidden_num, corpus_num, bi, class_num, word2id['<PAD>'])
-    clone.load_state_dict(torch.load('lstm.params'))
+    clone = CnnModel(corpus_num, embed_size, class_num, word2id['<PAD>'])
+    clone.load_state_dict(torch.load('cnn.params'))
     clone.to(args.device)
     clone.eval()
     if os.path.exists(args.output_file):
         os.remove(args.output_file)
     result = []
     for test_data, test_tag, test_da_len in test_dataloader:
-        clone.forward(test_data, test_da_len, test_tag)
+        clone.forward(test_data, test_tag)
         r = clone.result.cpu().numpy()
         for i in range(len(r)):
             result.append(r[i].tolist())
     write_output(args, result)
+
 
 if __name__ == '__main__':
     main()
