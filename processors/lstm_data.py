@@ -40,9 +40,9 @@ def build_corpus(mode, data_dir, make_vocab=True):
             tag_lists.append(tag_list)
 
 
-        # if mode in ['train']:
-        #     word_lists = sorted(word_lists, key=lambda x:len(x), reverse=True)
-        #     tag_lists = sorted(tag_lists, key=lambda x:len(x), reverse=True)
+        if mode in ['train']:
+            word_lists = sorted(word_lists, key=lambda x:len(x), reverse=True)
+            tag_lists = sorted(tag_lists, key=lambda x:len(x), reverse=True)
 
         if make_vocab:
             word2id = build_map(word_lists)
