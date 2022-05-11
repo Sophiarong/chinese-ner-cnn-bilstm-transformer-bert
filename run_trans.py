@@ -63,19 +63,21 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = StepLR(optimizer, step_size=args.scheduler_step_size, gamma=args.scheduler_gamma)
     logger.info("\n{}".format(model))
+    epoched = 0
 
     if args.continue_train:
         checkpoint = torch.load(args.path_checkpoint)
         model.load_state_dict(checkpoint['net'])
-        optimizer.load_state_dict(checkpoint['optimizer'])
-        scheduler.load_state_dict(checkpoint['scheduler'])
+        # optimizer.load_state_dict(checkpoint['optimizer'])
+        # scheduler.load_state_dict(checkpoint['scheduler'])
+        epoched=checkpoint['epoched']
 
     best_dev = -1
     #训练
     for e in range(args.epoch):
         epoch_loss = 0
         epoch_step = 0
-
+        logger.info("now lr is {}".format(optimizer.state_dict()['param_groups'][0]['lr']))
         model.train()
         for i, data_tag_len in tqdm(enumerate(train_dataloader)):
             data, tag, _ = data_tag_len
@@ -96,6 +98,15 @@ def main():
 
         scheduler.step()
 
+        if args.continue_save:
+            checkpoint = {
+                "net": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "scheduler": scheduler.state_dict(),
+                "epoched":e+epoched
+            }
+            torch.save(checkpoint, args.path_checkpoint)
+
         model.eval()
         dev_res = []
         for dev_data, dev_tag, _ in dev_dataloader:
@@ -109,21 +120,13 @@ def main():
 
         #f1计算
         precision, recall, f1 = calculate(dev_res, dev_tag_lists)
-        table = pt.PrettyTable(["Train {} Loss".format(e), "Dev Precision", "Dev Recall", "f1"])
+        table = pt.PrettyTable(["Train {} Loss".format(e+epoched), "Dev Precision", "Dev Recall", "f1"])
         table.add_row(["{:.4f}".format(epoch_loss/epoch_step), "{:.4f}".format(precision), "{:.4f}".format(recall), "{:.4f}".format(f1)])
         logger.info("\n{}".format(table))
 
         if f1 > best_dev:
             best_dev = f1
             torch.save(model.state_dict(), 'trans.params')
-
-    if args.continue_save:
-        checkpoint = {
-            "net":model.state_dict(),
-            "optimizer":optimizer.state_dict(),
-            "scheduler":scheduler.state_dict()
-        }
-        torch.save(checkpoint, args.save_checkpoint)
 
     clone = TransformerModel(corpus_num, class_num, d_model, d_hid, nlayers, nhead, word2id['<PAD>'], args.dropout)
     clone.load_state_dict(torch.load('trans.params'))
